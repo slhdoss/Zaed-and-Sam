@@ -36,31 +36,31 @@ static vsize_t memory_size;   // number of bytes malloc'd in memory[]
 
 
 void sal_init(u_int32_t size) {
-    
 
-    //check that size is a power of 2, if not increment untill it is
-    if(sqrt((float)size) % 1 != 0){
-        while((sqrt((float)size) % 1 != 0)) {
-            size++;    
-        }
-        (u_int32_t) size 
-    }
+    
 
     // malloc new memory block
     byte *memory = malloc(size);
 
-    // if there is insuficient memory for newMemBlock abort 
+    // if there is insuficient memory for memory bloc abort 
     if(memory == NULL){
         fprintf(stderr, "sal_init: insufficient memory");
         abort();  
     } else {
-        free_list_ptr = memory[1];  //traverse through the header to first bloc of memory
-        memory_size = sizeof(memory); //size of memory allocated
-                
-        Location -> magic = MAGIC_FREE; //?? don't know the purpose of this yet, general stats?? 
-        Location -> size = sizeof(newMemBlock);  // general stats ot be stored in the header??
-        Location -> next = free_list_ptr;   // stored index, initialized at the membloc post header start 
-        Location -> prev = free_list_ptr; // stoted index, initialized at the membloc post header start
+        
+        //set global variables
+        free_list_ptr = 0;  // memory[0] is the first segment global variable
+        memory_size = sizeof(memory); //size of memory allocated global variable
+        free_header_t firstMemBlock; // create a new header for the new bloc of memory
+        
+        //place first header struct at the start of the malloced memory array
+        &firstMemBlock = memory[0]
+
+        // intialize the first header stuct with stats
+        firstMemBlock.magic = MAGIC_FREE; // Magic free is an identifier which indicates the memory bloc has no content 
+        firstMemBlock.size = HEADER_SIZE;  // No memory has yet been allocated to the header
+        firstMemBlock.next = free_list_ptr;  // index, loops to the first head untill more headers are added 
+        firstMemBlock.prev = free_list_ptr; //  index, loops to the first head untill more headers are added
     }
 
 }
@@ -71,14 +71,13 @@ void *sal_malloc(u_int32_t n)
    return NULL; // temporarily
 }
 
-void sal_free(void *object)
-{
-   // TODO
+void sal_free(void *object) {
+    // TODO
 }
 
-void sal_end(void)
-{
-   // TODO
+void sal_end(void) {
+    free(memory);  
+    memory_size = 0; // just in case the old value resurfaces
 }
 
 void sal_stats(void)
@@ -91,3 +90,18 @@ void sal_stats(void)
    free_list_ptr = free_list_ptr;
    memory_size = memory_size;
 }
+
+
+
+/*
+Notes
+
+    //check that size is a power of 2, if not increment it untill it is
+    if(sqrt((float)size) % 1 != 0){
+        while((sqrt((float)size) % 1 != 0)) {  // convert to float so that sqrt function can work
+            size++;    
+        }
+        (u_int32_t)size  // convert the varible back into u_int32_1 
+    }
+
+*/
