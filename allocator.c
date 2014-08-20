@@ -1,4 +1,4 @@
-//
+/
 //  COMP1927 Assignment 1 - Memory Suballocator
 //  allocator.c ... implementation
 //
@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <math.h>
 
 #define HEADER_SIZE    sizeof(struct free_list_header)  
 #define MAGIC_FREE     0xDEADBEEF
@@ -37,12 +38,22 @@ static vsize_t memory_size;   // number of bytes malloc'd in memory[]
 
 void sal_init(u_int32_t size) {
 
-    
+    // check that size consists of sensible values
+    if(size < 0){ // another test to exclude characters???
+        fprintf(stderr, "sal_init: memory request consists incorrect Values");
+        abort();  
+    //check that size is a power of 2, if not increment it untill it is 
+    if(sqrt((float)size) % 1 != 0){
+        while((sqrt((float)size) % 1 != 0)) {  // convert to float so that sqrt function can work
+            size++;    
+        }
+        (u_int32_t)size;  // convert the varible back into u_int32_1 
+    }    
 
     // malloc new memory block
     byte *memory = malloc(size);
 
-    // if there is insuficient memory for memory bloc abort 
+    // if there is insuficient memory for memory bloc or failure in malloc abort 
     if(memory == NULL){
         fprintf(stderr, "sal_init: insufficient memory");
         abort();  
@@ -100,12 +111,4 @@ void sal_stats(void)
 /*
 Notes
 
-    //check that size is a power of 2, if not increment it untill it is
-    if(sqrt((float)size) % 1 != 0){
-        while((sqrt((float)size) % 1 != 0)) {  // convert to float so that sqrt function can work
-            size++;    
-        }
-        (u_int32_t)size  // convert the varible back into u_int32_1 
-    }
 
-*/
