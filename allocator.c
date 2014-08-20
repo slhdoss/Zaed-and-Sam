@@ -50,17 +50,21 @@ void sal_init(u_int32_t size) {
         
         //set global variables
         free_list_ptr = 0;  // memory[0] is the first segment global variable
-        memory_size = sizeof(memory); //size of memory allocated global variable
-        free_header_t firstMemBlock; // create a new header for the new bloc of memory
+        memory_size = sizeof(memory); //size of memory allocated global variable 
         
-        //place first header struct at the start of the malloced memory array
-        &firstMemBlock = memory[0]
+        
+        // create a new header for the new bloc of memory
+        free_header_t firstMemBlock;
 
         // intialize the first header stuct with stats
         firstMemBlock.magic = MAGIC_FREE; // Magic free is an identifier which indicates the memory bloc has no content 
         firstMemBlock.size = HEADER_SIZE;  // No memory has yet been allocated to the header
         firstMemBlock.next = free_list_ptr;  // index, loops to the first head untill more headers are added 
         firstMemBlock.prev = free_list_ptr; //  index, loops to the first head untill more headers are added
+
+        //write first header struct to the start of the malloced memory array
+        memcpy(memory, &firstMemBlock, HEADER_SIZE);
+        
     }
 
 }
