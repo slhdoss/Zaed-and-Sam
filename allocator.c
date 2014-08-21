@@ -1,4 +1,4 @@
-/
+//
 //  COMP1927 Assignment 1 - Memory Suballocator
 //  allocator.c ... implementation
 //
@@ -10,17 +10,17 @@
 #include "allocator.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
-#include <math.h>
 
 #define HEADER_SIZE    sizeof(struct free_list_header)  
 #define MAGIC_FREE     0xDEADBEEF
 #define MAGIC_ALLOC    0xBEEFDEAD
 
 typedef unsigned char byte;
-typedef u_int32_t vlink_t;          // Memory index
-typedef u_int32_t vsize_t;          // Memory Size + Header 
-typedef u_int32_t vaddr_t;          // index of the first memeory bloc
+typedef u_int32_t vlink_t;
+typedef u_int32_t vsize_t;
+typedef u_int32_t vaddr_t;
 
 typedef struct free_list_header {
    u_int32_t magic;           // ought to contain MAGIC_FREE
@@ -29,69 +29,116 @@ typedef struct free_list_header {
    vlink_t prev;              // memory[] index of previous free block
 } free_header_t;
 
-// Global data
+// Global dataa
 
-static byte *memory = NULL;   // pointer to start of suballocator memory  ???after the header
+static byte *memory = NULL;   // pointer to start of suballocator memory
 static vaddr_t free_list_ptr; // index in memory[] of first block in free list
 static vsize_t memory_size;   // number of bytes malloc'd in memory[]
 
+static u_int32_t smallestPowerOfTwo (u_int32_t size);
 
 void sal_init(u_int32_t size) {
-
-    // check that size consists of sensible values
-    if(size < 0){ // another test to exclude characters???
-        fprintf(stderr, "sal_init: memory request consists incorrect Values");
-        abort();  
-    //check that size is a power of 2, if not increment it untill it is 
-    if(sqrt((float)size) % 1 != 0){
-        while((sqrt((float)size) % 1 != 0)) {  // convert to float so that sqrt function can work
-            size++;    
+    
+    if (memory == NULL) {
+        // check that size consists of sensible values
+        if(size < 0){ // another test to exclude characters???
+            fprintf(stderr, "sal_init: memory request consists incorrect Values");
+            abort();
         }
-        (u_int32_t)size;  // convert the varible back into u_int32_1 
-    }    
+        //check that size is a power of 2, if not increment it untill it is 
+        u_int32_t correct_size = smallestPowerOfTwo (size + HEADER_SIZE); 
 
-    // malloc new memory block
-    byte *memory = malloc(size);
+        // malloc new memory block
+        memory = malloc(correct_size);
 
-    // if there is insuficient memory for memory bloc or failure in malloc abort 
-    if(memory == NULL){
-        fprintf(stderr, "sal_init: insufficient memory");
-        abort();  
+        // if there is insuficient memory for memory bloc or failure in malloc abort 
+        if(memory == NULL){
+            fprintf(stderr, "sal_init: insufficient memory");
+            abort();  
+        } else { 
+            //set global variables
+            free_list_ptr = 0;          // memory[0] is the first segment global variable
+            memory_size = correct_size; //size of memory allocated global variable 
+               
+            // create a new header for the new bloc of memory
+            free_header_t firstMemBlock =  {MAGIC_FREE, memory_size, free_list_ptr, free_list_ptr};
+
+            //write first header struct to the start of the malloced memory array
+            memcpy(memory, &firstMemBlock, HEADER_SIZE);
+        }
+    }
+}
+
+void *sal_malloc(u_int32_t n) {
+    
+    // establish a point of reference called currMemBlock
+    free_header_t * currMemBlock = &(memory[free_list_ptr]);
+   
+    //confirms if input request fits a memory segment available 
+    //traverses through mememory untill it finds a potential fit
+    while (currMemBlock->size < n + HEADER_SIZE) {  
+        currMemBlock = &(memory[currMemBlock->next])
+        
+        /*
+        // check for memory coruption durring header traverse (potential issue here)
+        if (currMemBlock->magic != MAGIC_FREE) {
+            fprintf(stderr, "Memory corruption");
+            abort();
+        }
+        */
+
+
+        //If it traverse through the list and reloops to the first header returns NULL    
+        if (currMemBlock == &(memory[free_list_ptr])) {
+            return NULL;
+       }
+    }
+   
+    // See if request can be fited within half the space of identified block otherwise continue with current block identified
+    if((currMemBlock->size) / 2 >= (n + HEADER_SIZE)) {
+
+        // segment the bloc untill a close fit is found
+        while ((currMemBlock->size) / 2 >= (n + HEADER_SIZE)) {
+        
+            // make a new header
+            free_header_t newHeader = {MAGIC_FREE, currMemBlock->size / 2, currMemBlock->next, (currMemBlock-memory)};
+            memcpy(&(memory[((currMemBlock/2)-memory)], &newHeader, HEADER_SIZE); // recheck this!!!!!
+            // change the currMemBlock stats
+            currMemBlock -> next = (currMemBlock/2) - memory;
+            currMemBlock -> size = currMemBlock -> size / 2;
+
+        }
+    } 
+    // assign the new bloc as allocated
+        currMemBlock -> magic = MAGIC_ALLOC;
+    // adjust the free_lis_ptr to next free header after the newly allocated memory block
+        free_list_ptr = currMemBlock->next;
+    
+   return (currMemBlock + HEADER_SIZE); //return pointer to the first byte of newly allocated memory after the header
+}
+
+
+void sal_free(void *object) {
+    
+    // establish a point of reference called currMemBlock
+    free_header_t * currMemBlock = &(memory[free_list_ptr]);
+    
+    //
+    if(*(object-HEADER_SIZE) != MAGIC_ALLOC){
+        fprintf(stderr, "Attempt to free non-allocated memory");
+        abort();
     } else {
-        
-        //set global variables
-        free_list_ptr = 0;  // memory[0] is the first segment global variable
-        memory_size = sizeof(memory); //size of memory allocated global variable 
-        
-        
-        // create a new header for the new bloc of memory
-        free_header_t firstMemBlock;
 
-        // intialize the first header stuct with stats
-        firstMemBlock.magic = MAGIC_FREE; // Magic free is an identifier which indicates the memory bloc has no content 
-        firstMemBlock.size = HEADER_SIZE;  // No memory has yet been allocated to the header
-        firstMemBlock.next = free_list_ptr;  // index, loops to the first head untill more headers are added 
-        firstMemBlock.prev = free_list_ptr; //  index, loops to the first head untill more headers are added
+    
 
-        //write first header struct to the start of the malloced memory array
-        memcpy(memory, &firstMemBlock, HEADER_SIZE);
-        
     }
 
 }
 
-void *sal_malloc(u_int32_t n)
+void sal_end(void)
 {
-   // TODO
-   return NULL; // temporarily
-}
-
-void sal_free(void *object) {
-    // TODO
-}
-
-void sal_end(void) {
-    free(memory);  
+    free(memory);
+    memory = NULL;
     memory_size = 0; // just in case the old value resurfaces
 }
 
@@ -108,7 +155,15 @@ void sal_stats(void)
 
 
 
-/*
-Notes
 
+////// Our things
 
+static u_int32_t smallestPowerOfTwo (u_int32_t size) {
+
+    u_int32_t smallestPower = 2;
+    while (smallestPower < size) {
+        smallestPower *= 2;
+    }
+
+    return smallestPower;
+}
