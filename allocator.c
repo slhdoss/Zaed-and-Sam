@@ -128,7 +128,7 @@ void *sal_malloc(u_int32_t n) {
 void sal_free(void *object) {
     
     // establish a header point of reference
-    free_header_t * objectMemBlock = (free_header_t *) object - HEADER_SIZE;
+    free_header_t * objectMemBlock = (free_header_t *)(object - HEADER_SIZE);
     
     // find the header index of the object
     u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
