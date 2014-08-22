@@ -116,10 +116,52 @@ void *sal_malloc(u_int32_t n) {
 }
 
 void sal_free(void *object) {
-   // check if its valid.
-   // traverse free list
+    
+    // find the header index of the object
+    object_Index = object - HEADER_SIZE;
 
-    setFreeListPtrToStart();
+    // establish a header point of reference
+    free_header_t * objectMemBlock = &(memory[object_Index]);
+
+    // Check requested header is valid
+    if( *(objectMemBlock) != MAGIC_ALLOC) {
+        fprintf(stderr, "Attempt to free non-allocated memory");
+        abort();
+    }
+    
+    // check if the entire block is allocated
+    if(num_free_blocks == 0) { 
+        objectMemBlock->next = object_Index;
+        objectMemBlock->previous = object_Index;
+        free_list_ptr = object_Index;
+    // check if allocated bloc is the header with the smalled index
+    } else if (object_Index < free_list_ptr) { 
+        free_header_t * flpMemBlock = &(memory[free_list_ptr])
+        // Change index pointers
+        objectMemBlock->next = flpMemBlock - memory;
+        objectMemBlock->previous = flpMemBlock->previous;
+        flpMemBlock->previous = object_Index;            
+        free_list_ptr = object_Index;
+    // All remaining cases
+    } else {
+        free_header_t * neighbourFreeMemblock= &(memory[free_list_ptr]);
+        neighbourFreeMemblock_index = neighbourFreeMemblock- memory; 
+        // travers through free list untill an adjacent free memory block is found
+        while(object_Index < neighbourFreeMemblock_index) {
+            neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
+            neighbourFreeMemblock = &(memory[neighbourFreeMemblock_index]);
+            if (neighbourFreeMemblock_index == free_list_ptr){
+                break;    
+            }
+        }
+        // Change index pointers
+        objectMemBlock -> next = neighbourFreeMemblock-> previous;      
+        neighbourFreeMemblock-> previous = object_Index;
+        objectMemBlock -> next = neighbourFreeMemblock_index;
+    } 
+
+    objectMemBlock->magic = MAGIC_FREE;
+    num_free_blocks++;
 }
 
 void sal_end(void) {
@@ -153,6 +195,7 @@ static void setFreeListPtrToStart () {
 
 
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
+    
     free_header_t * region_header = memory + region_index;
 
     // while we can fit it within half the space of the chosen free region, 
