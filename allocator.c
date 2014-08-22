@@ -17,6 +17,8 @@
 #define MAGIC_FREE     0xDEADBEEF
 #define MAGIC_ALLOC    0xBEEFDEAD
 
+#define NOT_FOUND -1;
+
 typedef unsigned char byte;
 typedef u_int32_t vlink_t;
 typedef u_int32_t vsize_t;
@@ -35,10 +37,13 @@ static byte *memory = NULL;   // pointer to start of suballocator memory
 static vaddr_t free_list_ptr; // index in memory[] of first block in free list
 static vsize_t memory_size;   // number of bytes malloc'd in memory[]
 
-static u_int32_t smallestPowerOfTwo (u_int32_t size);
+static int num_free_blocks = 0; // how many free blocks we have
 
-void sal_init(u_int32_t size)
-{
+static u_int32_t smallestPowerOfTwo (u_int32_t size);
+static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
+static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
+
+void sal_init(u_int32_t size) {
     if (memory == NULL) {
         // check that size consists of sensible values
         if(size < 0){ // another test to exclude characters???
@@ -57,18 +62,12 @@ void sal_init(u_int32_t size)
             abort();  
         } else { 
             //set global variables
-            free_list_ptr = 0xCCCCCCCC;          // memory[0] is the first segment global variable
+            free_list_ptr = 0;          // memory[0] is the first segment global variable
             memory_size = correct_size; //size of memory allocated global variable 
+            num_free_blocks = 1;
                
             // create a new header for the new bloc of memory
             free_header_t firstMemBlock =  {MAGIC_FREE, memory_size, free_list_ptr, free_list_ptr};
-            /*
-            // intialize the first header stuct with stats
-            firstMemBlock.magic = MAGIC_FREE; // Magic free is an identifier which indicates the memory bloc has no content 
-            firstMemBlock.size = HEADER_SIZE;  // No memory has yet been allocated to the header
-            firstMemBlock.next = free_list_ptr;  // index, loops to the first head untill more headers are added 
-            firstMemBlock.prev = free_list_ptr; //  index, loops to the first head untill more headers are added
-            */
 
             //write first header struct to the start of the malloced memory array
             memcpy(memory, &firstMemBlock, HEADER_SIZE);
@@ -76,47 +75,61 @@ void sal_init(u_int32_t size)
     }
 }
 
-void *sal_malloc(u_int32_t n)
-{
-   // Find a region that fits.
-   free_header_t * currFreeRegion = &(memory[free_list_ptr]);
+
+void *sal_malloc(u_int32_t n) {
+    // if we're all out of space, then fuck it.
+    if (num_free_blocks == 0) {
+        return NULL;
+    }
+    
+    // desired size is just given plus the size of the header. 
+    u_int_32_t desired_size = n + HEADER_SIZE;
+    
+    // determine the 'best' region to allocate based on some policy
+    // at the moment its just first-fit.
+    u_int32_t chosen_region_index = getBestFreeRegionIndex (desired_size);
+
+    // if there's no space, then return null
+    if (best_free_region_index == NOT_FOUND) { 
+        return NULL; 
+    }
+
+    // split the region, if possible.
+    splitFreeRegion(chosen_region_index, desired_size);
+
+    // set the magic variable to 'allocated'
+    free_header_t * chosen_region_header = memory + chosen_region_index;
+    chosen_region_header->magic = MAGIC_ALLOC;
+
+    // remove the region from the free list by adjusting it's neighbours.
+    free_header_t * next_neighbour_header = memory + chosen_region_header->next;
+    free_header_t * prev_neighbour_header = memory + chosen_region_header->prev;
+    next_neighbour_header->prev = chosen_region_header->prev;
+    prev_neighbour_header->next = chosen_region_header->next;
+
+    setFreeListPtrToStart();
    
-   while (currFreeRegion->size < n + HEADER_SIZE) {
-       currFreeRegion = &(memory[currFreeRegion->next])
-       
-       if (currFreeRegion == &(memory[free_list_ptr])) {
-           return NULL;
-       }
-   }
-   
-   // See if we can fit it within half the space
-   while ((currFreeRegion->size) / 2 >= (n + HEADER_SIZE)) {
-       free_header_t newHeader = {MAGIC_FREE, currFreeRegion->size / 2, free_list_ptr, free_list_ptr};
-       // Divide it in half
-       // Put the header half way
-       // Adjust the sizes
-   }
-   
-   return NULL; // temporarily
+    num_free_blocks--;
+    
+    // finally, return the address of the allocated region (plus header size)
+    return memory + chosen_region_index + HEADER_SIZE; 
 }
 
+void sal_free(void *object) {
+   // check if its valid.
+   // traverse free list
 
-
-
-void sal_free(void *object)
-{
-   // TODO
+    setFreeListPtrToStart();
 }
 
-void sal_end(void)
-{
+void sal_end(void) {
     free(memory);
     memory = NULL;
     memory_size = 0; // just in case the old value resurfaces
+    num_free_blocks = 0;
 }
 
-void sal_stats(void)
-{
+void sal_stats(void) {
    // Optional, but useful
    printf("sal_stats\n");
     // we "use" the global variables here
@@ -130,6 +143,68 @@ void sal_stats(void)
 
 
 ////// Our things
+
+static void setFreeListPtrToStart () {
+    if (num_free_blocks < 1)
+    // traverse the list
+    // find smallest one
+    // set it to that
+}
+
+
+static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
+    free_header_t * region_header = memory + region_index;
+
+    // while we can fit it within half the space of the chosen free region, 
+    // divide the region in half.
+    while (region_header->size / 2 >= desired_size) {
+        // determine where the split will occur.
+        u_int32_t destination_index = memory + region_index + (region_header->size / 2);
+
+        // create a new header to insert at destination_index.
+        free_header_t new_header = { MAGIC_FREE, 
+                                     region_header->size / 2, 
+                                     region_header->next
+                                     region_index };
+      
+        // insert the header
+        memcpy(destination_index, &new_header, HEADER_SIZE);
+       
+        // adjust the prev index of the header 'in front of' (this_free_region->next) the free region we're splitting.
+        free_header_t * neighbour = memory + region_header->next;
+        neighbour->prev = destination_index;
+       
+        // adjust the header of the region we're splitting to account for the changes.
+        region_header->size /= 2;
+        region_header->next = destination_index;
+       
+        num_free_blocks++;
+   }
+}
+
+// At the moment our policy is to find the first place that fits,
+// but that could change.
+static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size) {
+    u_int32_t curr_free_region_index        = free_list_ptr;
+    free_header_t * curr_free_region_header = memory + curr_free_region_index;
+   
+    // loop through all free regions until we find one that fits.
+    while (curr_free_region_header->size < desired_size) {
+        // get the index of the next free region.
+        curr_free_region_index = memory + curr_free_region_header->next;
+       
+        // if we're back to free_list_ptr, there's no space availeble
+        // so just return NULL.
+        if (curr_free_region_index == free_list_ptr)) {
+            return NOT_FOUND;
+        } 
+       
+        // otherwise set the header pointer to the header of the next region.
+        curr_free_region_header = memory + curr_free_region_index;
+   }
+
+   return curr_free_region_index;       
+}
 
 static u_int32_t smallestPowerOfTwo (u_int32_t size) {
 
