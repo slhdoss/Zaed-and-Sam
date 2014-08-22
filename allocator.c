@@ -43,6 +43,8 @@ static u_int32_t smallestPowerOfTwo (u_int32_t size);
 static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
 static void merge (u_int32_t region_index);
+static u_int32_t findTotalFreeMemory(void);
+
 
 void sal_init(u_int32_t size) {
     if (memory == NULL) {
@@ -128,7 +130,7 @@ void *sal_malloc(u_int32_t n) {
 void sal_free(void *object) {
     
     // establish a header point of reference
-    free_header_t * objectMemBlock = (free_header_t *)(object - HEADER_SIZE);
+    free_header_t * objectMemBlock = (free_header_t *) (object - HEADER_SIZE);
     
     // find the header index of the object
     u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
@@ -189,13 +191,13 @@ void sal_end(void) {
 }
 
 void sal_stats(void) {
-   // Optional, but useful
-   printf("sal_stats\n");
-    // we "use" the global variables here
-    // just to keep the compiler quiet
-   memory = memory;
-   free_list_ptr = free_list_ptr;
-   memory_size = memory_size;
+    // Optional, but useful
+    printf("sal_stats\n");
+    printf("Total memory: %d\n",memory_size);
+    printf("Total free memory: %d \n" , findTotalFreeMemory());
+    printf("Total allocated mememory: %d \n" , (memory_size - findTotalFreeMemory()));
+    printf("Number of free memory blocks: %d\n" ,num_free_blocks);
+    printf("Free_list_ptr: %d\n" , free_list_ptr);
 }
 
 
@@ -341,3 +343,28 @@ static u_int32_t smallestPowerOfTwo (u_int32_t size) {
 
     return smallestPower;
 }
+
+/*
+static int findTotalAllocatedMemory(){
+}
+*/
+
+static u_int32_t findTotalFreeMemory(void) {
+    
+    u_int32_t curr_free_region_index = free_list_ptr; 
+    free_header_t * curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+    
+    u_int32_t sumMemory = curr_free_region_header->size;    
+    curr_free_region_index = curr_free_region_header->next;
+    curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+    
+    while(curr_free_region_index != curr_free_region_index){
+        sumMemory += curr_free_region_header-> size;   
+        curr_free_region_index = curr_free_region_header->next;
+        curr_free_region_header = (free_header_t *) memory + curr_free_region_index;  
+    }
+
+    return sumMemory;
+}
+
+
