@@ -103,13 +103,13 @@ void *sal_malloc(u_int32_t n) {
     splitFreeRegion(chosen_region_index, desired_size);
 
     // set the magic variable to 'allocated'
-    free_header_t * chosen_region_header = (free_header_t *) memory + chosen_region_index;
+    free_header_t * chosen_region_header = (free_header_t *) (memory + chosen_region_index);
     chosen_region_header->magic = MAGIC_ALLOC;
 
     // remove the region from the free list by adjusting it's neighbours.
     if (num_free_blocks > 1) {
-        free_header_t * next_neighbour_header = (free_header_t *) memory + chosen_region_header->next;
-        free_header_t * prev_neighbour_header = (free_header_t *) memory + chosen_region_header->prev;
+        free_header_t * next_neighbour_header = (free_header_t *) (memory + chosen_region_header->next);
+        free_header_t * prev_neighbour_header = (free_header_t *) (memory + chosen_region_header->prev);
         next_neighbour_header->prev = chosen_region_header->prev;
         prev_neighbour_header->next = chosen_region_header->next;
     }
@@ -194,9 +194,9 @@ void sal_end(void) {
 void sal_stats(void) {
     // Optional, but useful
     printf("sal_stats\n");
-    printf("Total memory (Bytes): %d\n",(memory_size/2));
+    printf("Total memory (Bytes): %d\n", memory_size);
     printf("Total free memory (Bytes): %d \n" , findTotalFreeMemory());
-    printf("Total allocated mememory (Bytes): %d \n" , ((memory_size/2) - findTotalFreeMemory()));
+    printf("Total allocated mememory (Bytes): %d \n" , (memory_size - findTotalFreeMemory());
     printf("Number of free memory blocks: %d\n" ,num_free_blocks);
     printf("Free_list_ptr: %d\n" , free_list_ptr);
 }
@@ -212,7 +212,7 @@ static void merge (u_int32_t region_index) {
         return;
     }
 
-    free_header_t * region_header = (free_header_t *) memory + region_index;
+    free_header_t * region_header = (free_header_t *) (memory + region_index);
     u_int32_t dest_region_index;
     free_header_t * dest_region_header;
 
@@ -220,7 +220,7 @@ static void merge (u_int32_t region_index) {
     if ((region_index / region_header->size) % 2 == 0) {
         // we're going to try and merge it with the free region directly in front.
         dest_region_index = region_header->next;
-        dest_region_header = (free_header_t *) memory + dest_region_index;
+        dest_region_header = (free_header_t *) (memory + dest_region_index);
 
         // If it's located directly in front, AND is the right size, then they can
         // merge! (otherwise do nothing)
@@ -237,7 +237,7 @@ static void merge (u_int32_t region_index) {
             // adjust the free pointer list so everyone points to the right place
             // ie, the region in front is removed
             region_header->next = dest_region_header->next;
-            free_header_t * new_neighbour = (free_header_t *) memory + region_header->next;
+            free_header_t * new_neighbour = (free_header_t *) (memory + region_header->next);
             new_neighbour->prev = region_index;
 
             // number of free blocks has decreased
@@ -251,7 +251,7 @@ static void merge (u_int32_t region_index) {
     } else {
         // we're going to try and merge it with the free region directly behind.
         dest_region_index = region_header->prev;
-        dest_region_header =(free_header_t *)  memory + dest_region_index;
+        dest_region_header =(free_header_t *)  (memory + dest_region_index);
 
         // If it's located directly in front of the previous region, 
         // AND is the right size, then they can merge! (Otherwise do nothing)
@@ -268,7 +268,7 @@ static void merge (u_int32_t region_index) {
             // adjust the free pointer list so everyone points to the right place
             // ie, the current region is removed
             dest_region_header->next = region_header->next;
-            free_header_t * new_neighbour =(free_header_t *)  memory + dest_region_header->next;
+            free_header_t * new_neighbour =(free_header_t *) (memory + dest_region_header->next);
             new_neighbour->prev = dest_region_index;
 
             // number of free blocks has decreased
@@ -282,7 +282,7 @@ static void merge (u_int32_t region_index) {
 }
 
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
-    free_header_t * region_header = (free_header_t *) memory + region_index;
+    free_header_t * region_header = (free_header_t *) (memory + region_index);
 
     // while we can fit it within half the space of the chosen free region, 
     // divide the region in half.
@@ -300,7 +300,7 @@ static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
         memcpy(memory + destination_index, &new_header, HEADER_SIZE);
        
         // adjust the prev index of the header 'in front of' (this_free_region->next) the free region we're splitting.
-        free_header_t * neighbour = (free_header_t *) memory + region_header->next;
+        free_header_t * neighbour = (free_header_t *) (memory + region_header->next);
         neighbour->prev = destination_index;
        
         // adjust the header of the region we're splitting to account for the changes.
@@ -315,7 +315,7 @@ static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
 // but that could change.
 static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size) {
     u_int32_t curr_free_region_index        = free_list_ptr;
-    free_header_t * curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
    
     // loop through all free regions until we find one that fits.
     while (curr_free_region_header->size < desired_size) {
@@ -329,7 +329,7 @@ static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size) {
         } 
        
         // otherwise set the header pointer to the header of the next region.
-        curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+        curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
    }
 
    return curr_free_region_index;       
@@ -353,19 +353,19 @@ static int findTotalAllocatedMemory(){
 static u_int32_t findTotalFreeMemory(void) {
     
     u_int32_t curr_free_region_index = free_list_ptr; 
-    free_header_t * curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
     
     if(num_free_blocks == 0){
         return 0;
     }
     u_int32_t sumMemory = curr_free_region_header->size;    
     curr_free_region_index = curr_free_region_header->next;
-    curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
+    curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
     
     while(curr_free_region_index != free_list_ptr){
         sumMemory += curr_free_region_header-> size;   
         curr_free_region_index = curr_free_region_header->next;
-        curr_free_region_header = (free_header_t *) memory + curr_free_region_index;  
+        curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
     }
 
     return sumMemory;
