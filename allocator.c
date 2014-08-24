@@ -97,7 +97,8 @@ void *sal_malloc(u_int32_t n) {
     if (chosen_region_index == NOT_FOUND) { 
         return NULL; 
     }
-
+    printf("chosen_region_index is ?? %d\n", chosen_region_index);
+    
     // split the region, if possible.
     splitFreeRegion(chosen_region_index, desired_size);
 
@@ -193,9 +194,9 @@ void sal_end(void) {
 void sal_stats(void) {
     // Optional, but useful
     printf("sal_stats\n");
-    printf("Total memory: %d\n",memory_size);
-    printf("Total free memory: %d \n" , findTotalFreeMemory());
-    printf("Total allocated mememory: %d \n" , (memory_size - findTotalFreeMemory()));
+    printf("Total memory (Bytes): %d\n",(memory_size/2));
+    printf("Total free memory (Bytes): %d \n" , findTotalFreeMemory());
+    printf("Total allocated mememory (Bytes): %d \n" , ((memory_size/2) - findTotalFreeMemory()));
     printf("Number of free memory blocks: %d\n" ,num_free_blocks);
     printf("Free_list_ptr: %d\n" , free_list_ptr);
 }
@@ -354,11 +355,14 @@ static u_int32_t findTotalFreeMemory(void) {
     u_int32_t curr_free_region_index = free_list_ptr; 
     free_header_t * curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
     
+    if(num_free_blocks == 0){
+        return 0;
+    }
     u_int32_t sumMemory = curr_free_region_header->size;    
     curr_free_region_index = curr_free_region_header->next;
     curr_free_region_header = (free_header_t *) memory + curr_free_region_index;
     
-    while(curr_free_region_index != curr_free_region_index){
+    while(curr_free_region_index != free_list_ptr){
         sumMemory += curr_free_region_header-> size;   
         curr_free_region_index = curr_free_region_header->next;
         curr_free_region_header = (free_header_t *) memory + curr_free_region_index;  
@@ -366,5 +370,3 @@ static u_int32_t findTotalFreeMemory(void) {
 
     return sumMemory;
 }
-
-
