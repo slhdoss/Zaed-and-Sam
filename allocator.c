@@ -44,7 +44,7 @@ static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
 static void merge (u_int32_t region_index);
 static u_int32_t findTotalFreeMemory(void);
-
+void showFreeMemoryBlocStats(void);
 
 void sal_init(u_int32_t size) {
     if (memory == NULL) {
@@ -97,7 +97,6 @@ void *sal_malloc(u_int32_t n) {
     if (chosen_region_index == NOT_FOUND) { 
         return NULL; 
     }
-    printf("chosen_region_index is ?? %d\n", chosen_region_index);
     
     // split the region, if possible.
     splitFreeRegion(chosen_region_index, desired_size);
@@ -136,7 +135,6 @@ void sal_free(void *object) {
     // find the header index of the object
     u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
     
-
     // Check requested header is valid
     if( objectMemBlock->magic != MAGIC_ALLOC) {
         fprintf(stderr, "Attempt to free non-allocated memory");
@@ -148,13 +146,14 @@ void sal_free(void *object) {
         objectMemBlock->next = object_Index;
         objectMemBlock->prev = object_Index;
         free_list_ptr = object_Index;
-    // check if allocated bloc is the header with the smalled index
+    // check if allocated bloc has the smallest index
     } else if (object_Index < free_list_ptr) { 
         free_header_t * flpMemBlock = (free_header_t *) &(memory[free_list_ptr]);
         
         // Change index pointers
         objectMemBlock->next = free_list_ptr;
         objectMemBlock->prev = flpMemBlock->prev;
+
         flpMemBlock->prev = object_Index;
                     
         free_list_ptr = object_Index;
@@ -194,11 +193,13 @@ void sal_end(void) {
 void sal_stats(void) {
     // Optional, but useful
     printf("sal_stats\n");
-    printf("Total memory (Bytes): %d\n", memory_size);
-    printf("Total free memory (Bytes): %d \n" , findTotalFreeMemory());
-    printf("Total allocated mememory (Bytes): %d \n" , (memory_size - findTotalFreeMemory());
-    printf("Number of free memory blocks: %d\n" ,num_free_blocks);
     printf("Free_list_ptr: %d\n" , free_list_ptr);
+    printf("Number of free memory blocks: %d\n" ,num_free_blocks);
+    printf("Total memory: %d\n", memory_size);
+    printf("Total free memory: %d \n" , findTotalFreeMemory());
+    printf("Total allocated mememory: %d \n" ,(memory_size - findTotalFreeMemory()));
+    printf("\n***Showing free memory bloc content:\n");
+    showFreeMemoryBlocStats();
 }
 
 
@@ -350,23 +351,59 @@ static int findTotalAllocatedMemory(){
 }
 */
 
+
+
+
+void showFreeMemoryBlocStats(void){
+
+u_int32_t curr_free_region_index = free_list_ptr; 
+    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+    int count = 0;
+    if(num_free_blocks != 0){
+   
+   
+    	u_int32_t sumMemory = curr_free_region_header->size;    
+    	curr_free_region_index = curr_free_region_header->next;
+    	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+    	printf("free mememory bloc %d which has %d memory\n" , curr_free_region_index, curr_free_region_header-> size);
+    	while(curr_free_region_index != free_list_ptr){      
+        	sumMemory += curr_free_region_header-> size;   
+        	curr_free_region_index = curr_free_region_header->next;
+        	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
+    		printf("free mememory bloc %d which has %d memory\n" , curr_free_region_index, curr_free_region_header-> size); 
+		count++;
+        	if(count == 50){
+		printf("!!!!!!!Warning free list pointer not found Break executed!!!!!!!!\n");        
+		break;
+        	}
+    	}
+   }
+}
+
+
+
+
+
 static u_int32_t findTotalFreeMemory(void) {
     
     u_int32_t curr_free_region_index = free_list_ptr; 
     free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    
+    int count = 0;
     if(num_free_blocks == 0){
         return 0;
     }
     u_int32_t sumMemory = curr_free_region_header->size;    
     curr_free_region_index = curr_free_region_header->next;
     curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    
-    while(curr_free_region_index != free_list_ptr){
+    while(curr_free_region_index != free_list_ptr){      
         sumMemory += curr_free_region_header-> size;   
         curr_free_region_index = curr_free_region_header->next;
         curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
+        if(count == 20){
+        break;
+        }
     }
 
     return sumMemory;
 }
+
