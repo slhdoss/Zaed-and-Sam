@@ -44,12 +44,12 @@ static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
 static void merge (u_int32_t region_index);
 static u_int32_t findTotalFreeMemory(void);
-
+static void showFreeMemoryBlocStats(void);
 
 void sal_init(u_int32_t size) {
     if (memory == NULL) {
         // check that size consists of sensible values
-        if(size < (HEADER_SIZE + 1){ // another test to exclude characters???
+        if(size < (HEADER_SIZE + 1)){ // another test to exclude characters???
             fprintf(stderr, "sal_init: memory request too small for aplication program");
             abort();
         }
@@ -160,7 +160,7 @@ void sal_free(void *object) {
             flpMemBlock->prev = object_Index;
             flpMemBlock->next = object_Index;
             free_list_ptr = object_Index;
-
+        
         // if there are multiple blocs of free memory
         } else {
             free_header_t * listEndMemBlock = (free_header_t *) &(memory[flpMemBlock->prev]);    
@@ -168,7 +168,7 @@ void sal_free(void *object) {
             objectMemBlock->next = free_list_ptr;
             objectMemBlock->prev = flpMemBlock->prev;
             flpMemBlock->prev = object_Index;
-            listEndMemBlock->next = object_Index
+            listEndMemBlock->next = object_Index;
             free_list_ptr = object_Index;
         }
 
@@ -213,10 +213,11 @@ void sal_stats(void) {
     printf("sal_stats\n");
     printf("Total memory: %d\n", memory_size);
     printf("Total free memory: %d \n" , findTotalFreeMemory());
-    printf("Total allocated mememory: %d \n" , (memory_size - findTotalFreeMemory());
+    printf("Total allocated mememory: %d \n" , (memory_size - findTotalFreeMemory()));
     printf("Number of free memory blocks: %d\n" ,num_free_blocks);
     printf("Free_list_ptr: %d\n" , free_list_ptr);
-
+    printf("\n***Showing free memory bloc header stats***\n");
+    showFreeMemoryBlocStats();
 }
 
 ////// Our things
@@ -380,4 +381,26 @@ static u_int32_t findTotalFreeMemory(void) {
     }
 
     return sumMemory;
+}
+
+
+void showFreeMemoryBlocStats(void){
+
+u_int32_t curr_free_region_index = free_list_ptr; 
+    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+  
+    if(num_free_blocks != 0){
+   
+    	u_int32_t sumMemory = curr_free_region_header->size;    
+    	curr_free_region_index = curr_free_region_header->next;
+    	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+    	printf("free mememory bloc %d which has %d memory\n" , curr_free_region_index, curr_free_region_header-> size);
+    	while(curr_free_region_index != free_list_ptr){      
+        	sumMemory += curr_free_region_header-> size;   
+        	curr_free_region_index = curr_free_region_header->next;
+        	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
+    		printf("free mememory bloc %d which has %d memory\n" , curr_free_region_index, curr_free_region_header-> size); 
+		
+    	}
+    }
 }
