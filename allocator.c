@@ -93,8 +93,8 @@ void *sal_malloc(u_int32_t n) {
     // at the moment its just first-fit.
     u_int32_t chosen_region_index = getBestFreeRegionIndex (desired_size);
 
-    // if there's no space, then return null
-    if (chosen_region_index == NOT_FOUND) { 
+    // if there's no space or n is not a valid value, then return null
+    if ((chosen_region_index == NOT_FOUND) || (n < 1)) { 
         return NULL; 
     }
     
@@ -129,82 +129,89 @@ void *sal_malloc(u_int32_t n) {
 
 void sal_free(void *object) {
     
-    // establish a header point of reference
-    free_header_t * objectMemBlock = (free_header_t *) (object - HEADER_SIZE);
-    
-    // find the header index of the object
-    u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
-    
+    // check that recieved pointer is valid before executing the steps
+    if((object > memory) || (object < memory + memory_size)){
+        // establish a header point of reference
+        free_header_t * objectMemBlock = (free_header_t *) (object - HEADER_SIZE);
+        
+        // find the header index of the object
+        u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
+        
 
-    // Check requested header is valid
-    if( objectMemBlock->magic != MAGIC_ALLOC) {
-        fprintf(stderr, "Attempt to free non-allocated memory");
-        abort();
-    }
-    
-    // check if the entire block is allocated
-    if(num_free_blocks == 0) { 
-        objectMemBlock->next = object_Index;
-        objectMemBlock->prev = object_Index;
-        free_list_ptr = object_Index;
-    
-    // check if allocated bloc is the header with the smalled index
-    } else if (object_Index < free_list_ptr) { 
-        free_header_t * flpMemBlock = (free_header_t *) &(memory[free_list_ptr]);        
-
-        // if there is only one block of free memory
-        if(flpMemBlock->next == free_list_ptr) {
-            objectMemBlock->next = free_list_ptr;
-            objectMemBlock->prev = free_list_ptr;
-            flpMemBlock->prev = object_Index;
-            flpMemBlock->next = object_Index;
+        // Check requested header is valid
+        if( objectMemBlock->magic != MAGIC_ALLOC) {
+            fprintf(stderr, "Memory Corupted: Attempt to free non-allocated memory");
+            abort();
+        }
+        
+        // check if the entire block is allocated
+        if(num_free_blocks == 0) { 
+            objectMemBlock->next = object_Index;
+            objectMemBlock->prev = object_Index;
             free_list_ptr = object_Index;
         
-        // if there are multiple blocs of free memory
-        } else {
-            free_header_t * listEndMemBlock = (free_header_t *) &(memory[flpMemBlock->prev]);    
+        // check if allocated bloc is the header with the smalled index
+        } else if (object_Index < free_list_ptr) { 
+            free_header_t * flpMemBlock = (free_header_t *) &(memory[free_list_ptr]);        
+
+            // if there is only one block of free memory
+            if(flpMemBlock->next == free_list_ptr) {
+                objectMemBlock->next = free_list_ptr;
+                objectMemBlock->prev = free_list_ptr;
+                flpMemBlock->prev = object_Index;
+                flpMemBlock->next = object_Index;
+                free_list_ptr = object_Index;
             
-            objectMemBlock->next = free_list_ptr;
-            objectMemBlock->prev = flpMemBlock->prev;
-            flpMemBlock->prev = object_Index;
-            listEndMemBlock->next = object_Index;
-            free_list_ptr = object_Index;
-        }
-
-        
-    // memory bloc is located within the list or at the end
-    } else {
-        free_header_t * neighbourFreeMemblock=(free_header_t *)  &(memory[free_list_ptr]);
-        u_int32_t neighbourFreeMemblock_index = free_list_ptr; 
-      
-        // travers through free list untill an adjacent free memory block is found before the object of interest
-        
-        // Iterate past the first free list header, so that it does not get caught by the break statment in the while loop
-	neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
-        neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
-        
-        while(object_Index > neighbourFreeMemblock_index) {
-            printf("object index = %d and neighbour index = %d\n", object_Index, neighbourFreeMemblock_index);
-            neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
-            neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
-            // incase the allocated memblock is at the end of the list otherwise loop will go to infinity
-            if (neighbourFreeMemblock_index == free_list_ptr){
-                break;    
+            // if there are multiple blocs of free memory
+            } else {
+                free_header_t * listEndMemBlock = (free_header_t *) &(memory[flpMemBlock->prev]);    
+                
+                objectMemBlock->next = free_list_ptr;
+                objectMemBlock->prev = flpMemBlock->prev;
+                flpMemBlock->prev = object_Index;
+                listEndMemBlock->next = object_Index;
+                free_list_ptr = object_Index;
             }
-        }
 
-        free_header_t * otherNeighbourFreeMemblock=(free_header_t *) &(memory[neighbourFreeMemblock->prev]);
-        objectMemBlock -> next = otherNeighbourFreeMemblock -> next;       
-        objectMemBlock -> prev = neighbourFreeMemblock-> prev;
-        neighbourFreeMemblock-> prev = object_Index;
-        otherNeighbourFreeMemblock -> next = object_Index;
+            
+        // memory bloc is located within the list or at the end
+        } else {
+            free_header_t * neighbourFreeMemblock=(free_header_t *)  &(memory[free_list_ptr]);
+            u_int32_t neighbourFreeMemblock_index = free_list_ptr; 
+          
+            // travers through free list untill an adjacent free memory block is found before the object of interest
+            
+            // Iterate past the first free list header, so that it does not get caught by the break statment in the while loop
+        neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
+            neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
+            
+            while(object_Index > neighbourFreeMemblock_index) {
+                printf("object index = %d and neighbour index = %d\n", object_Index, neighbourFreeMemblock_index);
+                neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
+                neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
+                // incase the allocated memblock is at the end of the list otherwise loop will go to infinity
+                if (neighbourFreeMemblock_index == free_list_ptr){
+                    break;    
+                }
+            }
 
-    } 
+            free_header_t * otherNeighbourFreeMemblock=(free_header_t *) &(memory[neighbourFreeMemblock->prev]);
+            objectMemBlock -> next = otherNeighbourFreeMemblock -> next;       
+            objectMemBlock -> prev = neighbourFreeMemblock-> prev;
+            neighbourFreeMemblock-> prev = object_Index;
+            otherNeighbourFreeMemblock -> next = object_Index;
 
-    objectMemBlock->magic = MAGIC_FREE;
-    num_free_blocks++;
+        } 
 
-    merge (object_Index);
+        objectMemBlock->magic = MAGIC_FREE;
+        num_free_blocks++;
+
+        merge (object_Index);
+    
+    } else {
+        fprintf(stderr, "sal_free function unsuccessful: function recieved pointer to location outside of memory bounds\n");
+        //fabort();
+    }
 }
 
 void sal_end(void) {
@@ -398,16 +405,15 @@ u_int32_t curr_free_region_index = free_list_ptr;
   
     if(num_free_blocks != 0){
      
-    	printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
+        printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
         curr_free_region_index = curr_free_region_header->next;
-    	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    	
-    	while(curr_free_region_index != free_list_ptr){      
-        	printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
-        	curr_free_region_index = curr_free_region_header->next;
-        	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
-    		 
-    	}
+        curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+        
+        while(curr_free_region_index != free_list_ptr){      
+            printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
+            curr_free_region_index = curr_free_region_header->next;
+            curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
+             
+        }
     }
 }
-
