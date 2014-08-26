@@ -393,7 +393,7 @@ u_int32_t curr_free_region_index = free_list_ptr;
     	u_int32_t sumMemory = curr_free_region_header->size;    
     	curr_free_region_index = curr_free_region_header->next;
     	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    	printf("free mememory bloc %d which has %d memory\n" , curr_free_region_index, curr_free_region_header-> size);
+    	printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
     	while(curr_free_region_index != free_list_ptr){      
         	sumMemory += curr_free_region_header-> size;   
         	curr_free_region_index = curr_free_region_header->next;
