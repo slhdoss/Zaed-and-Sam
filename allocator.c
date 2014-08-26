@@ -97,7 +97,6 @@ void *sal_malloc(u_int32_t n) {
     if (chosen_region_index == NOT_FOUND) { 
         return NULL; 
     }
-    printf("chosen_region_index is ?? %d\n", chosen_region_index);
     
     // split the region, if possible.
     splitFreeRegion(chosen_region_index, desired_size);
