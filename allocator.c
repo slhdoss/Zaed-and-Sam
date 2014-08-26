@@ -183,7 +183,7 @@ void sal_free(void *object) {
 	neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
         neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
         
-        while(object_Index < neighbourFreeMemblock_index) {
+        while(object_Index > neighbourFreeMemblock_index) {
             printf("object index = %d and neighbour index = %d\n", object_Index, neighbourFreeMemblock_index);
             neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
             neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
