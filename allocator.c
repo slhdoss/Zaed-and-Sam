@@ -1,3 +1,67 @@
+//
+//  COMP1927 Assignment 1 - Memory Suballocator
+//  allocator.c ... implementation
+//
+//  Created by Liam O'Connor on 18/07/12.
+//  Modified by John Shepherd in August 2014
+//  Copyright (c) 2012-2014 UNSW. All rights reserved.
+//
+
+#include "allocator.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+
+#define HEADER_SIZE    sizeof(struct free_list_header)  
+#define MAGIC_FREE     0xDEADBEEF
+#define MAGIC_ALLOC    0xBEEFDEAD
+
+#define NOT_FOUND -1
+
+typedef unsigned char byte;
+typedef u_int32_t vlink_t;
+typedef u_int32_t vsize_t;
+typedef u_int32_t vaddr_t;
+
+typedef struct free_list_header {
+   u_int32_t magic;           // ought to contain MAGIC_FREE
+   vsize_t size;              // # bytes in this block (including header)
+   vlink_t next;              // memory[] index of next free block
+   vlink_t prev;              // memory[] index of previous free block
+} free_header_t;
+
+// Global dataa
+
+static byte *memory = NULL;   // pointer to start of suballocator memory
+static vaddr_t free_list_ptr; // index in memory[] of first block in free list
+static vsize_t memory_size;   // number of bytes malloc'd in memory[]
+
+static int num_free_blocks = 0; // how many free blocks we have
+
+static u_int32_t smallestPowerOfTwo (u_int32_t size);
+static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
+static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
+static void merge (u_int32_t region_index);
+static u_int32_t findTotalFreeMemory(void);
+static void showFreeMemoryBlocStats(void);
+
+void sal_init(u_int32_t size) {
+    if (memory == NULL) {
+        // check that size consists of sensible values
+        if(size < (HEADER_SIZE + 1)){ // another test to exclude characters???
+            fprintf(stderr, "sal_init: memory request too small for aplication program");
+            abort();
+        }
+        //check that size is a power of 2, if not increment it untill it is 
+        u_int32_t correct_size = smallestPowerOfTwo (size + HEADER_SIZE); 
+
+        // malloc new memory block
+        memory = malloc(correct_size);
+
+        // if there is insuficient memory for memory bloc or failure in malloc abort 
+        if(memory == NULL){
+            fprintf(stderr, "sal_init: insufficient memory");
             abort();  
         } else { 
             //set global variables
@@ -112,23 +176,29 @@ void sal_free(void *object) {
     } else {
         free_header_t * neighbourFreeMemblock=(free_header_t *)  &(memory[free_list_ptr]);
         u_int32_t neighbourFreeMemblock_index = free_list_ptr; 
+      
+        // travers through free list untill an adjacent free memory block is found before the object of interest
         
-        // travers through free list untill an adjacent free memory block is found
+        // Iterate past the first free list header, so that it does not get caught by the break statment in the while loop
+	neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
+        neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
+        
         while(object_Index < neighbourFreeMemblock_index) {
+            printf("object index = %d and neighbour index = %d\n", object_Index, neighbourFreeMemblock_index);
             neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
             neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
-            
+            // incase the allocated memblock is at the end of the list otherwise loop will go to infinity
             if (neighbourFreeMemblock_index == free_list_ptr){
                 break;    
             }
         }
 
-        free_header_t * otherNeighbourFreeMemblock=(free_header_t *)  &(memory[neighbourFreeMemblock->prev]);
-        objectMemBlock -> next = neighbourFreeMemblock->prev;      
+        free_header_t * otherNeighbourFreeMemblock=(free_header_t *) &(memory[neighbourFreeMemblock->prev]);
+        objectMemBlock -> next = otherNeighbourFreeMemblock -> next;       
+        objectMemBlock -> prev = neighbourFreeMemblock-> prev;
         neighbourFreeMemblock-> prev = object_Index;
-         
-        objectMemBlock -> next = neighbourFreeMemblock_index;
         otherNeighbourFreeMemblock -> next = object_Index;
+
     } 
 
     objectMemBlock->magic = MAGIC_FREE;
