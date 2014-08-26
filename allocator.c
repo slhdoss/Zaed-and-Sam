@@ -208,10 +208,12 @@ void sal_free(void *object) {
 }
 
 void sal_end(void) {
-    free(memory);
-    memory = NULL;
-    memory_size = 0; // just in case the old value resurfaces
-    num_free_blocks = 0;
+    if(memory != NULL){
+        free(memory);
+        memory = NULL;
+        memory_size = 0; // just in case the old value resurfaces
+        num_free_blocks = 0;
+    }
 }
 
 void sal_stats(void) {
