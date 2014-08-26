@@ -1,67 +1,3 @@
-//
-//  COMP1927 Assignment 1 - Memory Suballocator
-//  allocator.c ... implementation
-//
-//  Created by Liam O'Connor on 18/07/12.
-//  Modified by John Shepherd in August 2014
-//  Copyright (c) 2012-2014 UNSW. All rights reserved.
-//
-
-#include "allocator.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-
-#define HEADER_SIZE    sizeof(struct free_list_header)  
-#define MAGIC_FREE     0xDEADBEEF
-#define MAGIC_ALLOC    0xBEEFDEAD
-
-#define NOT_FOUND -1
-
-typedef unsigned char byte;
-typedef u_int32_t vlink_t;
-typedef u_int32_t vsize_t;
-typedef u_int32_t vaddr_t;
-
-typedef struct free_list_header {
-   u_int32_t magic;           // ought to contain MAGIC_FREE
-   vsize_t size;              // # bytes in this block (including header)
-   vlink_t next;              // memory[] index of next free block
-   vlink_t prev;              // memory[] index of previous free block
-} free_header_t;
-
-// Global dataa
-
-static byte *memory = NULL;   // pointer to start of suballocator memory
-static vaddr_t free_list_ptr; // index in memory[] of first block in free list
-static vsize_t memory_size;   // number of bytes malloc'd in memory[]
-
-static int num_free_blocks = 0; // how many free blocks we have
-
-static u_int32_t smallestPowerOfTwo (u_int32_t size);
-static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
-static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
-static void merge (u_int32_t region_index);
-static u_int32_t findTotalFreeMemory(void);
-static void showFreeMemoryBlocStats(void);
-
-void sal_init(u_int32_t size) {
-    if (memory == NULL) {
-        // check that size consists of sensible values
-        if(size < (HEADER_SIZE + 1)){ // another test to exclude characters???
-            fprintf(stderr, "sal_init: memory request too small for aplication program");
-            abort();
-        }
-        //check that size is a power of 2, if not increment it untill it is 
-        u_int32_t correct_size = smallestPowerOfTwo (size + HEADER_SIZE); 
-
-        // malloc new memory block
-        memory = malloc(correct_size);
-
-        // if there is insuficient memory for memory bloc or failure in malloc abort 
-        if(memory == NULL){
-            fprintf(stderr, "sal_init: insufficient memory");
             abort();  
         } else { 
             //set global variables
@@ -389,17 +325,17 @@ u_int32_t curr_free_region_index = free_list_ptr;
     free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
   
     if(num_free_blocks != 0){
-   
-    	u_int32_t sumMemory = curr_free_region_header->size;    
-    	curr_free_region_index = curr_free_region_header->next;
-    	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+     
     	printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
+        curr_free_region_index = curr_free_region_header->next;
+    	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
+    	
     	while(curr_free_region_index != free_list_ptr){      
-        	sumMemory += curr_free_region_header-> size;   
+        	printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
         	curr_free_region_index = curr_free_region_header->next;
         	curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
-    		printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);  
-		
+    		 
     	}
     }
 }
+
