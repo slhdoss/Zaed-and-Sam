@@ -31,48 +31,48 @@ typedef struct free_list_header {
    vlink_t prev;              // memory[] index of previous free block
 } free_header_t;
 
-// Global dataa
-
+// global data
 static byte *memory = NULL;   // pointer to start of suballocator memory
 static vaddr_t free_list_ptr; // index in memory[] of first block in free list
 static vsize_t memory_size;   // number of bytes malloc'd in memory[]
 
-static int num_free_blocks = 0; // how many free blocks we have
-
+// function prototypes
 static u_int32_t smallestPowerOfTwo (u_int32_t size);
 static u_int32_t getBestFreeRegionIndex (u_int32_t desired_size);
 static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size);
 static void merge (u_int32_t region_index);
-static u_int32_t findTotalFreeMemory(void);
-static void showFreeMemoryBlocStats(void);
 
-void sal_init(u_int32_t size) {
-    if (memory == NULL) {
+void sal_init(u_int32_t size) {  
+    // only allocate memory if we haven't already done so. 
+    if (memory == NULL) {    
         // check that size consists of sensible values
-        if(size < (HEADER_SIZE + 1)){ // another test to exclude characters???
-            fprintf(stderr, "sal_init: memory request too small for aplication program");
+        if (size < HEADER_SIZE + 1) { 
+            fprintf(stderr, "sal_init: memory request too low");
             abort();
         }
-        //check that size is a power of 2, if not increment it untill it is 
-        u_int32_t correct_size = smallestPowerOfTwo (size + HEADER_SIZE); 
+        
+        // find the smallest power of two >= the requested size. 
+        u_int32_t correct_size = smallestPowerOfTwo(size); 
 
-        // malloc new memory block
+        // initialise memory
         memory = malloc(correct_size);
 
-        // if there is insuficient memory for memory bloc or failure in malloc abort 
+        // if malloc fails (due to insufficient available memory) then abort
         if(memory == NULL){
             fprintf(stderr, "sal_init: insufficient memory");
             abort();  
         } else { 
-            //set global variables
-            free_list_ptr = 0;          // memory[0] is the first segment global variable
-            memory_size = correct_size; //size of memory allocated global variable 
-            num_free_blocks = 1;
+            // set global variables
+            free_list_ptr = 0;              
+            memory_size = correct_size;    
                
-            // create a new header for the new bloc of memory
-            free_header_t firstMemBlock =  {MAGIC_FREE, memory_size, free_list_ptr, free_list_ptr};
+            // create the header to place at the start of the memory block
+            free_header_t firstMemBlock = { MAGIC_FREE, 
+                                            memory_size, 
+                                            free_list_ptr, 
+                                            free_list_ptr };
 
-            //write first header struct to the start of the malloced memory array
+            // copy header to start of memory block
             memcpy(memory, &firstMemBlock, HEADER_SIZE);
         }
     }
@@ -80,138 +80,106 @@ void sal_init(u_int32_t size) {
 
 
 void *sal_malloc(u_int32_t n) {
-    // if we're all out of space, then fuck it.
-    if (num_free_blocks == 0) {
+    // if user has requsted 0 bytes, then return NULL.
+    if (n == 0) {
         return NULL;
     }
 
-    
-    // desired size is just given plus the size of the header. 
     u_int32_t desired_size = n + HEADER_SIZE;
     
-    // determine the 'best' region to allocate based on some policy
-    // at the moment its just first-fit.
-    u_int32_t chosen_region_index = getBestFreeRegionIndex (desired_size);
+    // find the region to allocate to based on some policy (best-fit)
+    u_int32_t free_index = getBestFreeRegionIndex (desired_size);
 
-    // if there's no space or n is not a valid value, then return null
-    if ((chosen_region_index == NOT_FOUND) || (n < 1)) { 
+    // if there's no space, then return null
+    if (free_index == NOT_FOUND) { 
         return NULL; 
     }
     
     // split the region, if possible.
-    splitFreeRegion(chosen_region_index, desired_size);
+    splitFreeRegion (free_index, desired_size);
 
     // set the magic variable to 'allocated'
-    free_header_t * chosen_region_header = (free_header_t *) (memory + chosen_region_index);
-    chosen_region_header->magic = MAGIC_ALLOC;
-
-    // remove the region from the free list by adjusting it's neighbours.
-    if (num_free_blocks > 1) {
-        free_header_t * next_neighbour_header = (free_header_t *) (memory + chosen_region_header->next);
-        free_header_t * prev_neighbour_header = (free_header_t *) (memory + chosen_region_header->prev);
-        next_neighbour_header->prev = chosen_region_header->prev;
-        prev_neighbour_header->next = chosen_region_header->next;
-    }
-
-    // we're assuming that free_list_ptr already pointed to the smallest index.
-    // so if the chosen region = free list ptr, then shifting it to next will maintain that
-    // if it isnt, then we dont need to change anything
-    // fuck yeah its an invariant.
-    if (num_free_blocks > 1 && chosen_region_index == free_list_ptr) {
-        free_list_ptr = chosen_region_header->next;
-    }
-   
-    num_free_blocks--;
+    free_header_t * free_header = (free_header_t *) (memory + free_index);
     
-    // finally, return the address of the allocated region (plus header size)
-    return (void *) memory + chosen_region_index + HEADER_SIZE; 
+    // if there's only one free region then return NULL since this violates 
+    // the invariant.
+    if (free_header->next == free_index) {
+        return NULL;
+    }
+    
+    // otherwise set the header's magic value to allocated
+    free_header->magic = MAGIC_ALLOC;
+    
+    // adjust the prev/next values of next/prev free regions in the list.
+    free_header_t * next_free_header = (free_header_t *) (memory + free_header->next);
+    free_header_t * prev_free_header = (free_header_t *) (memory + free_header->prev);    
+    next_free_header->prev = free_header->prev;
+    prev_free_header->next = free_header->next;
+
+    // we're maintaining the invariant that free_list_ptr contains the smallest index
+    // of any free region indexes. if we've chosen the region pointed at by free_list_ptr
+    // shifting it to next will maintain this!
+    if (free_index == free_list_ptr) {
+        free_list_ptr = free_header->next;
+    }
+
+    // return the address of the allocated region (plus header size)
+    return (void *) (memory + free_index + HEADER_SIZE); 
 }
 
-void sal_free(void *object) {
+void sal_free(void *object) {  
+    // find the index and create a header reference
+    u_int32_t object_index = object - (void *) memory - HEADER_SIZE;
+    free_header_t * object_header = (free_header_t *) (memory + object_index);
     
-    // check that recieved pointer is valid before executing the steps
-    if((object > memory) || (object < memory + memory_size)){
-        // establish a header point of reference
-        free_header_t * objectMemBlock = (free_header_t *) (object - HEADER_SIZE);
-        
-        // find the header index of the object
-        u_int32_t object_Index = object - (void *) memory - HEADER_SIZE;
-        
-
-        // Check requested header is valid
-        if( objectMemBlock->magic != MAGIC_ALLOC) {
-            fprintf(stderr, "Memory Corupted: Attempt to free non-allocated memory");
-            abort();
+    // check if the object's header is valid.
+    if (object_header->magic != MAGIC_ALLOC) {
+        if (object_header->magic == MAGIC_FREE) {
+            fprintf(stderr, 
+                "memory corruption: attempting to free memory doesn't appear to be allocated");
+        } else {
+            fprintf(stderr, 
+                "memory corruption: given location is not a valid memory region (perhaps you've changed it's value, or it's been overwritten)");
         }
         
-        // check if the entire block is allocated
-        if(num_free_blocks == 0) { 
-            objectMemBlock->next = object_Index;
-            objectMemBlock->prev = object_Index;
-            free_list_ptr = object_Index;
-        
-        // check if allocated bloc is the header with the smalled index
-        } else if (object_Index < free_list_ptr) { 
-            free_header_t * flpMemBlock = (free_header_t *) &(memory[free_list_ptr]);        
-
-            // if there is only one block of free memory
-            if(flpMemBlock->next == free_list_ptr) {
-                objectMemBlock->next = free_list_ptr;
-                objectMemBlock->prev = free_list_ptr;
-                flpMemBlock->prev = object_Index;
-                flpMemBlock->next = object_Index;
-                free_list_ptr = object_Index;
-            
-            // if there are multiple blocs of free memory
-            } else {
-                free_header_t * listEndMemBlock = (free_header_t *) &(memory[flpMemBlock->prev]);    
-                
-                objectMemBlock->next = free_list_ptr;
-                objectMemBlock->prev = flpMemBlock->prev;
-                flpMemBlock->prev = object_Index;
-                listEndMemBlock->next = object_Index;
-                free_list_ptr = object_Index;
-            }
-
-            
-        // memory bloc is located within the list or at the end
-        } else {
-            free_header_t * neighbourFreeMemblock=(free_header_t *)  &(memory[free_list_ptr]);
-            u_int32_t neighbourFreeMemblock_index = free_list_ptr; 
-          
-            // travers through free list untill an adjacent free memory block is found before the object of interest
-            
-            // Iterate past the first free list header, so that it does not get caught by the break statment in the while loop
-        neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
-            neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
-            
-            while(object_Index > neighbourFreeMemblock_index) {
-                printf("object index = %d and neighbour index = %d\n", object_Index, neighbourFreeMemblock_index);
-                neighbourFreeMemblock_index = neighbourFreeMemblock-> next;
-                neighbourFreeMemblock = (free_header_t *) &(memory[neighbourFreeMemblock_index]);
-                // incase the allocated memblock is at the end of the list otherwise loop will go to infinity
-                if (neighbourFreeMemblock_index == free_list_ptr){
-                    break;    
-                }
-            }
-
-            free_header_t * otherNeighbourFreeMemblock=(free_header_t *) &(memory[neighbourFreeMemblock->prev]);
-            objectMemBlock -> next = otherNeighbourFreeMemblock -> next;       
-            objectMemBlock -> prev = neighbourFreeMemblock-> prev;
-            neighbourFreeMemblock-> prev = object_Index;
-            otherNeighbourFreeMemblock -> next = object_Index;
-
-        } 
-
-        objectMemBlock->magic = MAGIC_FREE;
-        num_free_blocks++;
-
-        merge (object_Index);
-    
-    } else {
-        fprintf(stderr, "sal_free function unsuccessful: function recieved pointer to location outside of memory bounds\n");
-        //fabort();
+        abort();
     }
+    
+    u_int32_t curr_free_index = free_list_ptr;
+    free_header_t * curr_free_header = (free_header_t *) (memory + free_list_ptr);
+    
+    // free_list_ptr points to free region in the list with smallest index, so if the index of
+    // the object is less than this we know free_header is directly in front. otherwise loop
+    // through the list until we reach the free_header directly in front of it, or we've
+    // wrapped around.
+    while(curr_free_index < object_index) {
+        curr_free_index = curr_free_header->next;
+        curr_free_header = (free_header_t *) (memory + curr_free_index);
+        
+        if (curr_free_index == free_list_ptr){
+            break;    
+        }
+    }
+    
+    // let the header behind the free'd region point to the free region header
+    free_header_t * prev_header = (free_header_t *) (memory + curr_free_header->prev);
+    prev_header->next = object_index;
+    
+    // set the new objects and curr region's next and prev values. curr_free_region is the one directly
+    // in front of the list.
+    object_header->next = curr_free_index;
+    object_header->prev = curr_free_header->prev;
+    curr_free_header->prev = object_index;
+    
+    // finally set the objects magic value to free 
+    object_header->magic = MAGIC_FREE;
+    
+    if (object_index < free_list_ptr) {
+        free_list_ptr = object_index;
+    }
+    
+    // merge if possible.
+    merge (object_index);
 }
 
 void sal_end(void) {
@@ -219,30 +187,22 @@ void sal_end(void) {
         free(memory);
         memory = NULL;
         memory_size = 0; // just in case the old value resurfaces
-        num_free_blocks = 0;
     }
 }
 
 void sal_stats(void) {
-    printf("sal_stats\n");
-    printf("Total memory: %d\n", memory_size);
-    printf("Total free memory: %d \n" , findTotalFreeMemory());
-    printf("Total allocated mememory: %d \n" , (memory_size - findTotalFreeMemory()));
-    printf("Number of free memory blocks: %d\n" ,num_free_blocks);
-    printf("Free_list_ptr: %d\n" , free_list_ptr);
-    printf("\n***Showing free memory bloc header stats***\n");
-    showFreeMemoryBlocStats();
 }
 
-////// Our things
+/* ********************** static functions ********************** */
 
 static void merge (u_int32_t region_index) {
-    // If theres only 1 free block then nothing should happen
-    if (num_free_blocks < 2) {
+    free_header_t * region_header = (free_header_t *) (memory + region_index);
+    
+    // if there's only one block left, then there's nothing to split!
+    if (region_header->next == region_index) {
         return;
     }
-
-    free_header_t * region_header = (free_header_t *) (memory + region_index);
+    
     u_int32_t dest_region_index;
     free_header_t * dest_region_header;
 
@@ -270,8 +230,6 @@ static void merge (u_int32_t region_index) {
             free_header_t * new_neighbour = (free_header_t *) (memory + region_header->next);
             new_neighbour->prev = region_index;
 
-            // number of free blocks has decreased
-            num_free_blocks--;
 
             // there is a possibility that we can merge again! So let's just call
             // merge again with region_index;
@@ -285,9 +243,8 @@ static void merge (u_int32_t region_index) {
 
         // If it's located directly in front of the previous region, 
         // AND is the right size, then they can merge! (Otherwise do nothing)
-        if ( (region_index == dest_region_index + dest_region_header->size) 
+        if ( (region_index == dest_region_index + dest_region_header->size)  
              && (dest_region_header->size == region_header->size) ) {
-
             // so weve agreed that free_list_ptr always contains the smallest possible free index.
             // this means that it never points to what we're on, since obviously theres a free 
             // region behind us in memory.
@@ -298,11 +255,10 @@ static void merge (u_int32_t region_index) {
             // adjust the free pointer list so everyone points to the right place
             // ie, the current region is removed
             dest_region_header->next = region_header->next;
-            free_header_t * new_neighbour =(free_header_t *) (memory + dest_region_header->next);
-            new_neighbour->prev = dest_region_index;
-
-            // number of free blocks has decreased
-            num_free_blocks--;
+            
+            free_header_t * next_neighbour =(free_header_t *) (memory + region_header->next);
+            next_neighbour->prev = dest_region_index;
+            
 
             // there is a possibility that we can merge again! So let's just call
             // merge again with dest_region_index;
@@ -336,8 +292,6 @@ static void splitFreeRegion (u_int32_t region_index, u_int32_t desired_size) {
         // adjust the header of the region we're splitting to account for the changes.
         region_header->size /= 2;
         region_header->next = destination_index;
-       
-        num_free_blocks++;
    }
 }
 
@@ -373,47 +327,4 @@ static u_int32_t smallestPowerOfTwo (u_int32_t size) {
     }
 
     return smallestPower;
-}
-
-
-static u_int32_t findTotalFreeMemory(void) {
-    
-    u_int32_t curr_free_region_index = free_list_ptr; 
-    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    
-    if(num_free_blocks == 0){
-        return 0;
-    }
-    u_int32_t sumMemory = curr_free_region_header->size;    
-    curr_free_region_index = curr_free_region_header->next;
-    curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-    
-    while(curr_free_region_index != free_list_ptr){
-        sumMemory += curr_free_region_header-> size;   
-        curr_free_region_index = curr_free_region_header->next;
-        curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
-    }
-
-    return sumMemory;
-}
-
-
-void showFreeMemoryBlocStats(void){
-
-u_int32_t curr_free_region_index = free_list_ptr; 
-    free_header_t * curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-  
-    if(num_free_blocks != 0){
-     
-        printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
-        curr_free_region_index = curr_free_region_header->next;
-        curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);
-        
-        while(curr_free_region_index != free_list_ptr){      
-            printf("free mememory bloc located at index %d which has %d bits of memory\n" , curr_free_region_index, curr_free_region_header-> size);
-            curr_free_region_index = curr_free_region_header->next;
-            curr_free_region_header = (free_header_t *) (memory + curr_free_region_index);  
-             
-        }
-    }
 }
